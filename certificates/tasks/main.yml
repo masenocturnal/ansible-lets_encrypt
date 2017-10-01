@@ -1,0 +1,128 @@
+---
+# tasks file for certificates
+- name: Install the python openssl-bindings and software-properties-common so we install use OpenSSL and certbot
+  apt:
+    name: "{{ item }}"
+    state: installed    
+  with_items:
+    - python3-openssl
+    - software-properties-common
+  delegate_to: localhost
+  become: True
+
+- name: "Where are we shoving the certs?"
+  file:
+    path: "~/le-certs"
+    state: directory
+    mode: 0700
+  delegate_to: localhost
+
+- name: "Do we have a private key?"
+  stat: 
+    path: "{{ private_key }}"
+  register: file_exists
+  delegate_to: localhost
+
+- name: "We totes need a private key"
+  openssl_privatekey:
+      path: "{{ private_key }}"
+      state: present
+  delegate_to: localhost
+  when: file_exists.stat.exists == False
+
+# - name: Generate a public key too
+#   openssl_publickey:
+#     path: "{{ public_key }}"
+#     privatekey_path: "{{ private_key }}"
+#   delegate_to: localhost
+
+- name: Add the Certbot (let's encrypt ACME client) PPA
+  apt_repository:
+    repo: 'ppa:certbot/certbot'
+    state: present
+  become: True
+  delegate_to: localhost
+
+- name: Install Certbot
+  apt:
+    name: certbot
+    state: latest
+    update_cache: yes
+  become: True
+  delegate_to: localhost
+
+
+- name: "Ensure that the well-known directory is present on the server"
+  file:
+    state: directory
+    path: "{{ well_known_path }}/.well-known/acme-challenge"
+    mode: 0755
+  tags:
+    - generate_cert
+
+
+- name: "Create the CSR"
+  openssl_csr:
+    path: "{{ csr_path }}"
+    privatekey_path: "{{ private_key }}"
+    common_name: "{{ primary_domain }}"
+    country_name: "AU"
+    email_address: "domain@miniatureworldmaker.com.au"
+    locality_name: "Mount Barker"
+    organization_name: "Miniature World Maker pty ltd"
+    subject_alt_name: "{{ additional_domains }}"
+  delegate_to: localhost
+  tags:
+    - generate_cert
+
+- name: "Readback the CSR"
+  raw: "openssl req -in {{ csr_path }} -noout -text"
+  register: csr
+  delegate_to: localhost
+  tags:
+    - generate_cert
+
+- name: Display CSR
+  debug:
+    var: csr.stdout_lines
+  delegate_to: localhost
+  tags:
+    - generate_cert
+
+# - name: Test loop
+#   debug:
+#     msg: "domain is : {{ item[4:] }}"
+#   with_items: "{{ additional_domains }}"
+#   tags:
+#     - generate_cert
+
+- name: "Submit Certificate to Let's Encrypt"
+  letsencrypt:
+     account_key: "{{ private_key }}"
+     csr: "{{ csr_path }}"
+     dest: "{{ certs_dir}}/{{ primary_domain }}.crt"
+  delegate_to: localhost    
+  register: le_challenge
+  tags:
+    - generate_cert
+
+- copy:
+     dest: "{{ well_known_path }}/{{item.value['http-01']['resource'] }}"
+     content: "{{ item.value['http-01']['resource_value'] }}"
+  when: le_challenge|changed
+  with_dict: "{{ le_challenge['challenge_data'] }}"
+  tags:
+    - generate_cert
+
+
+- letsencrypt:
+    account_key: "{{ private_key }}"
+    csr: "{{ csr_path }}"
+    dest: "{{ certs_dir }}/{{ primary_domain }}.crt"
+    data: "{{ le_challenge }}"
+  delegate_to: localhost  
+  tags:
+    - generate_cert
+
+  
+  

@@ -1,0 +1,6 @@
+---
+- hosts: webservers
+  gather_facts: false
+
+  roles:
+    - certificates
