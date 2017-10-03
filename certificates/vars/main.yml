@@ -8,6 +8,7 @@ additional_domains:
   - "DNS:www.miniatureworldmaker.com.au"
 certs_dir: "~/le-certs"
 private_key: "{{ certs_dir }}/priv_key.pem"
+account_key: "{{ certs_dir }}/account_key.pem"
 public_key: "{{ certs_dir }}/pub_key.pem"
 csr_path: "{{ certs_dir }}/{{ primary_domain }}.csr"
 well_known_path: "/tmp/letsencrypt/public_html/"

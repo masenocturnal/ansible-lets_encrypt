@@ -10,12 +10,25 @@
   delegate_to: localhost
   become: True
 
-- name: "Where are we shoving the certs?"
+- name: "Create the certificate storage dir?"
   file:
     path: "~/le-certs"
     state: directory
     mode: 0700
   delegate_to: localhost
+
+- name: "Do we have an existing account key?"
+  stat: 
+    path: "{{ account_key }}"
+  register: file_exists
+  delegate_to: localhost
+
+- name: Create Let's Encrypt account key
+  openssl_privatekey:
+      path: "{{ account_key }}"
+      state: present
+  delegate_to: localhost
+  when: file_exists.stat.exists == False
 
 - name: "Do we have a private key?"
   stat: 
@@ -23,7 +36,7 @@
   register: file_exists
   delegate_to: localhost
 
-- name: "We totes need a private key"
+- name: "Create a private key for the certificates"
   openssl_privatekey:
       path: "{{ private_key }}"
       state: present
@@ -98,7 +111,7 @@
 
 - name: "Submit Certificate to Let's Encrypt"
   letsencrypt:
-     account_key: "{{ private_key }}"
+     account_key: "{{ account_key }}"
      csr: "{{ csr_path }}"
      dest: "{{ certs_dir}}/{{ primary_domain }}.crt"
   delegate_to: localhost    
@@ -114,9 +127,8 @@
   tags:
     - generate_cert
 
-
 - letsencrypt:
-    account_key: "{{ private_key }}"
+    account_key: "{{ account_key }}"
     csr: "{{ csr_path }}"
     dest: "{{ certs_dir }}/{{ primary_domain }}.crt"
     data: "{{ le_challenge }}"
