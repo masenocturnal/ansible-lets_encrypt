@@ -73,7 +73,6 @@
   tags:
     - generate_cert
 
-
 - name: "Create the CSR"
   openssl_csr:
     path: "{{ csr_path }}"
@@ -114,12 +113,15 @@
      account_key: "{{ account_key }}"
      csr: "{{ csr_path }}"
      dest: "{{ certs_dir}}/{{ primary_domain }}.crt"
+     acme_directory: "https://acme-v01.api.letsencrypt.org/directory"
+     
   delegate_to: localhost    
   register: le_challenge
   tags:
     - generate_cert
 
-- copy:
+- name: "Add challenge/response files to the server. Assumes webserver config is setup for the ACME protocol"
+  copy:
      dest: "{{ well_known_path }}/{{item.value['http-01']['resource'] }}"
      content: "{{ item.value['http-01']['resource_value'] }}"
   when: le_challenge|changed
@@ -127,14 +129,46 @@
   tags:
     - generate_cert
 
-- letsencrypt:
+- name: "Respond to Let's encrypt with challenge data"
+  letsencrypt:
     account_key: "{{ account_key }}"
     csr: "{{ csr_path }}"
     dest: "{{ certs_dir }}/{{ primary_domain }}.crt"
     data: "{{ le_challenge }}"
+    acme_directory: "https://acme-v01.api.letsencrypt.org/directory"
+    
   delegate_to: localhost  
   tags:
     - generate_cert
+
+- name: "Copy Certificate Private Key to the server"
+  copy:
+    src: "{{ private_key }}"
+    dest: "{{ server_private_key_path }}"
+    owner: "{{ server_private_key_owner }}"
+    group: "{{ server_private_key_group }}"
+    mode: "{{ server_private_key_mode }}"
+    force: yes
+  become: True
+  tags:
+    - copy_cert
+
+- name: "Copy Certificate to the server"
+  copy:
+    src: "{{ certs_dir }}/{{ primary_domain }}.crt"
+    dest: "{{ server_crt_path }}"
+    owner: "{{ server_crt_owner }}"
+    group: "{{ server_crt_group }}"
+    mode: "{{ server_crt_mode }}"
+    force: yes
+  become: True
+  tags:
+    - copy_cert
+
+# - name: "Reload the webserver"
+
+
+
 
   
   
