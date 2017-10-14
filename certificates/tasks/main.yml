@@ -1,0 +1,173 @@
+---
+# tasks file for certificates
+- name: Install the python openssl-bindings and software-properties-common so we install use OpenSSL and certbot
+  apt:
+    name: "{{ item }}"
+    state: installed    
+  with_items:
+    - python3-openssl
+    - software-properties-common
+  delegate_to: localhost
+  become: True
+
+- name: "Create the certificate storage dir?"
+  file:
+    path: "~/le-certs"
+    state: directory
+    mode: 0700
+  delegate_to: localhost
+
+- name: "Do we have an existing account key?"
+  stat: 
+    path: "{{ account_key }}"
+  register: file_exists
+  delegate_to: localhost
+
+- name: Create Let's Encrypt account key
+  openssl_privatekey:
+      path: "{{ account_key }}"
+      state: present
+  delegate_to: localhost
+  when: file_exists.stat.exists == False
+
+- name: "Do we have a private key?"
+  stat: 
+    path: "{{ private_key }}"
+  register: file_exists
+  delegate_to: localhost
+
+- name: "Create a private key for the certificates"
+  openssl_privatekey:
+      path: "{{ private_key }}"
+      state: present
+  delegate_to: localhost
+  when: file_exists.stat.exists == False
+
+# - name: Generate a public key too
+#   openssl_publickey:
+#     path: "{{ public_key }}"
+#     privatekey_path: "{{ private_key }}"
+#   delegate_to: localhost
+
+- name: Add the Certbot (let's encrypt ACME client) PPA
+  apt_repository:
+    repo: 'ppa:certbot/certbot'
+    state: present
+  become: True
+  delegate_to: localhost
+
+- name: Install Certbot
+  apt:
+    name: certbot
+    state: latest
+    update_cache: yes
+  become: True
+  delegate_to: localhost
+
+- name: "Ensure that the well-known directory is present on the server"
+  file:
+    state: directory
+    path: "{{ well_known_path }}/.well-known/acme-challenge"
+    mode: 0755
+  tags:
+    - generate_cert
+
+- name: "Create the CSR"
+  openssl_csr:
+    path: "{{ csr_path }}"
+    privatekey_path: "{{ private_key }}"
+    common_name: "{{ primary_domain }}"
+    country_name: "{{ crt_country_name }}"
+    email_address: "{{ crt_email_address }}"
+    locality_name: "{{ crt_locality_name }}"
+    organization_name: "{{ crt_organization_name }}"
+    subject_alt_name: "{{ additional_domains }}"
+  delegate_to: localhost
+  tags:
+    - generate_cert
+
+- name: "Readback the CSR"
+  raw: "openssl req -in {{ csr_path }} -noout -text"
+  register: csr
+  delegate_to: localhost
+  tags:
+    - generate_cert
+
+- name: Display CSR
+  debug:
+    var: csr.stdout_lines
+  delegate_to: localhost
+  tags:
+    - generate_cert
+
+# - name: Test loop
+#   debug:
+#     msg: "domain is : {{ item[4:] }}"
+#   with_items: "{{ additional_domains }}"
+#   tags:
+#     - generate_cert
+
+- name: "Submit Certificate to Let's Encrypt"
+  letsencrypt:
+     account_key: "{{ account_key }}"
+     csr: "{{ csr_path }}"
+     dest: "{{ certs_dir}}/{{ primary_domain }}.crt"
+     acme_directory: "https://acme-v01.api.letsencrypt.org/directory"
+     
+  delegate_to: localhost    
+  register: le_challenge
+  tags:
+    - generate_cert
+
+- name: "Add challenge/response files to the server. Assumes webserver config is setup for the ACME protocol"
+  copy:
+     dest: "{{ well_known_path }}/{{item.value['http-01']['resource'] }}"
+     content: "{{ item.value['http-01']['resource_value'] }}"
+  when: le_challenge|changed
+  with_dict: "{{ le_challenge['challenge_data'] }}"
+  tags:
+    - generate_cert
+
+- name: "Respond to Let's encrypt with challenge data"
+  letsencrypt:
+    account_key: "{{ account_key }}"
+    csr: "{{ csr_path }}"
+    dest: "{{ certs_dir }}/{{ primary_domain }}.crt"
+    data: "{{ le_challenge }}"
+    acme_directory: "https://acme-v01.api.letsencrypt.org/directory"
+    
+  delegate_to: localhost  
+  tags:
+    - generate_cert
+
+- name: "Copy Certificate Private Key to the server"
+  copy:
+    src: "{{ private_key }}"
+    dest: "{{ server_private_key_path }}"
+    owner: "{{ server_private_key_owner }}"
+    group: "{{ server_private_key_group }}"
+    mode: "{{ server_private_key_mode }}"
+    force: yes
+  become: True
+  tags:
+    - copy_cert
+
+- name: "Copy Certificate to the server"
+  copy:
+    src: "{{ certs_dir }}/{{ primary_domain }}.crt"
+    dest: "{{ server_crt_path }}"
+    owner: "{{ server_crt_owner }}"
+    group: "{{ server_crt_group }}"
+    mode: "{{ server_crt_mode }}"
+    force: yes
+  become: True
+  tags:
+    - copy_cert
+
+# - name: "Reload the webserver"
+
+
+
+
+  
+  
