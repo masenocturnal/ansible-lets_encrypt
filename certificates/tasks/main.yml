@@ -64,7 +64,6 @@
   become: True
   delegate_to: localhost
 
-
 - name: "Ensure that the well-known directory is present on the server"
   file:
     state: directory
@@ -78,10 +77,10 @@
     path: "{{ csr_path }}"
     privatekey_path: "{{ private_key }}"
     common_name: "{{ primary_domain }}"
-    country_name: "AU"
-    email_address: "domain@miniatureworldmaker.com.au"
-    locality_name: "Mount Barker"
-    organization_name: "Miniature World Maker pty ltd"
+    country_name: "{{ crt_country_name }}"
+    email_address: "{{ crt_email_address }}"
+    locality_name: "{{ crt_locality_name }}"
+    organization_name: "{{ crt_organization_name }}"
     subject_alt_name: "{{ additional_domains }}"
   delegate_to: localhost
   tags:
