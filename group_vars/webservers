@@ -1,0 +1,11 @@
+---
+domains:
+- primary_domain: miniatureworldmaker.com.au
+  additional_domains:
+  - DNS:miniatureworldmaker.com
+  - DNS:miniatureworldmaker.com.au
+  - DNS:www.miniatureworldmaker.com
+  - DNS:www.miniatureworldmaker.com.au
+- primary_domain: nocturnal.net.au
+  additional_domains:
+  - DNS:nocturnal.net.au
