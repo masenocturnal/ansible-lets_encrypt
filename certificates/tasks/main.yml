@@ -1,12 +1,14 @@
 ---
-# tasks file for certificates
 - name: Install the python openssl-bindings and software-properties-common so we install use OpenSSL and certbot
   apt:
-    name: "{{ item }}"
-    state: installed    
+    name: "{{ software }}"
+    state: present
   with_items:
     - python3-openssl
+    - python-openssl
     - software-properties-common
+  loop_control:
+    loop_var: "software"
   delegate_to: localhost
   become: True
 
@@ -72,16 +74,23 @@
   tags:
     - generate_cert
 
+#- name: Test loop
+  #debug:
+    #msg: "domain is : {{ item[4:] }}"
+  #with_items: "{{ item['additional_domains'] }}"
+  #tags:
+    #- generate_cert
+
 - name: "Create the CSR"
   openssl_csr:
     path: "{{ csr_path }}"
     privatekey_path: "{{ private_key }}"
-    common_name: "{{ primary_domain }}"
+    common_name: "{{ item['primary_domain'] }}"
     country_name: "{{ crt_country_name }}"
     email_address: "{{ crt_email_address }}"
     locality_name: "{{ crt_locality_name }}"
     organization_name: "{{ crt_organization_name }}"
-    subject_alt_name: "{{ additional_domains }}"
+    subject_alt_name:  "{{ item['additional_domains'] }}"
   delegate_to: localhost
   tags:
     - generate_cert
@@ -100,21 +109,14 @@
   tags:
     - generate_cert
 
-# - name: Test loop
-#   debug:
-#     msg: "domain is : {{ item[4:] }}"
-#   with_items: "{{ additional_domains }}"
-#   tags:
-#     - generate_cert
 
 - name: "Submit Certificate to Let's Encrypt"
   letsencrypt:
      account_key: "{{ account_key }}"
      csr: "{{ csr_path }}"
-     dest: "{{ certs_dir}}/{{ primary_domain }}.crt"
+     dest: "{{ certs_dir}}/{{ item['primary_domain'] }}.crt"
      acme_directory: "https://acme-v01.api.letsencrypt.org/directory"
-     
-  delegate_to: localhost    
+  delegate_to: localhost
   register: le_challenge
   tags:
     - generate_cert
@@ -123,7 +125,7 @@
   copy:
      dest: "{{ well_known_path }}/{{item.value['http-01']['resource'] }}"
      content: "{{ item.value['http-01']['resource_value'] }}"
-  when: le_challenge|changed
+  when: le_challenge is changed
   with_dict: "{{ le_challenge['challenge_data'] }}"
   tags:
     - generate_cert
@@ -132,7 +134,7 @@
   letsencrypt:
     account_key: "{{ account_key }}"
     csr: "{{ csr_path }}"
-    dest: "{{ certs_dir }}/{{ primary_domain }}.crt"
+    dest: "{{ certs_dir }}/{{ item['primary_domain'] }}.crt"
     data: "{{ le_challenge }}"
     acme_directory: "https://acme-v01.api.letsencrypt.org/directory"
     
@@ -154,7 +156,7 @@
 
 - name: "Copy Certificate to the server"
   copy:
-    src: "{{ certs_dir }}/{{ primary_domain }}.crt"
+    src: "{{ certs_dir }}/{{ item['primary_domain'] }}.crt"
     dest: "{{ server_crt_path }}"
     owner: "{{ server_crt_owner }}"
     group: "{{ server_crt_group }}"
