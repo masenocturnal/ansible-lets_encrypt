@@ -1,25 +1,20 @@
 ---
 # vars file for certificates
-primary_domain: "miniatureworldmaker.com.au"
-additional_domains:
-  - "DNS:miniatureworldmaker.com"
-  - "DNS:{{ primary_domain }}" 
-  - "DNS:www.miniatureworldmaker.com"
-  - "DNS:www.miniatureworldmaker.com.au"
+
 certs_dir: "~/le-certs"
 private_key: "{{ certs_dir }}/priv_key.pem"
 account_key: "{{ certs_dir }}/account_key.pem"
 public_key: "{{ certs_dir }}/pub_key.pem"
-csr_path: "{{ certs_dir }}/{{ primary_domain }}.csr"
+csr_path: "{{ certs_dir }}/{{ item['primary_domain'] }}.csr"
 well_known_path: "/tmp/letsencrypt/public_html/"
 
-server_private_key_path: "/etc/ssl/private/{{ primary_domain }}.key"
+server_private_key_path: "/etc/ssl/private/{{ item['primary_domain'] }}.key"
 server_private_key_owner: "root"
 server_private_key_group: "root"
 server_private_key_mode: "0600"
 
 
-server_crt_path: "/etc/ssl/certs/{{ primary_domain }}.pem"
+server_crt_path: "/etc/ssl/certs/{{ item['primary_domain'] }}.pem"
 server_crt_owner: "root"
 server_crt_group: "root"
 server_crt_mode: "0600"
