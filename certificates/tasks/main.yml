@@ -111,11 +111,13 @@
 
 
 - name: "Submit Certificate to Let's Encrypt"
-  letsencrypt:
+  acme_certificate:
      account_key: "{{ account_key }}"
      csr: "{{ csr_path }}"
      dest: "{{ certs_dir}}/{{ item['primary_domain'] }}.crt"
-     acme_directory: "https://acme-v01.api.letsencrypt.org/directory"
+     acme_directory: "https://acme-v02.api.letsencrypt.org/directory"
+     acme_version: 2
+     terms_agreed: yes
   delegate_to: localhost
   register: le_challenge
   tags:
@@ -131,12 +133,14 @@
     - generate_cert
 
 - name: "Respond to Let's encrypt with challenge data"
-  letsencrypt:
+  acme_certificate:
     account_key: "{{ account_key }}"
     csr: "{{ csr_path }}"
     dest: "{{ certs_dir }}/{{ item['primary_domain'] }}.crt"
     data: "{{ le_challenge }}"
-    acme_directory: "https://acme-v01.api.letsencrypt.org/directory"
+    acme_directory: "https://acme-v02.api.letsencrypt.org/directory"
+    acme_version: 2
+    terms_agreed: yes
     
   delegate_to: localhost  
   tags:
