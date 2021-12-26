@@ -1,7 +1,7 @@
 ---
 # vars file for certificates
 
-certs_dir: "~/le-certs"
+certs_dir: "/tmp/certs"
 private_key: "{{ certs_dir }}/priv_key.pem"
 account_key: "{{ certs_dir }}/account_key.pem"
 public_key: "{{ certs_dir }}/pub_key.pem"

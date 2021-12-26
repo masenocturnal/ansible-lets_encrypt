@@ -1,20 +1,20 @@
 ---
-- name: Install the python openssl-bindings and software-properties-common so we install use OpenSSL and certbot
-  apt:
-    name: "{{ software }}"
-    state: present
-  with_items:
-    - python3-openssl
-    - python-openssl
-    - software-properties-common
-  loop_control:
-    loop_var: "software"
-  delegate_to: localhost
-  become: True
+# - name: Install the python openssl-bindings and software-properties-common so we install use OpenSSL and certbot
+#   apt:
+#     name: "{{ software }}"
+#     state: present
+#   with_items:
+#     - python3-openssl
+#     - python-openssl
+#     - software-properties-common
+#   loop_control:
+#     loop_var: "software"
+#   delegate_to: localhost
+#   become: True
 
-- name: "Create the certificate storage dir?"
+- name: "Create the certificate storage dir {{ item['primary_domain'] }}  ?"
   file:
-    path: "~/le-certs"
+    path: "/tmp/certs/"
     state: directory
     mode: 0700
   delegate_to: localhost
@@ -38,39 +38,40 @@
   register: file_exists
   delegate_to: localhost
 
-- name: "Create a private key for the certificates"
+- name: "Create a private key for the certificates {{ private_key }}"
   openssl_privatekey:
       path: "{{ private_key }}"
       state: present
   delegate_to: localhost
   when: file_exists.stat.exists == False
 
-# - name: Generate a public key too
-#   openssl_publickey:
-#     path: "{{ public_key }}"
-#     privatekey_path: "{{ private_key }}"
+- name: Generate a public key too
+  openssl_publickey:
+    path: "{{ public_key }}"
+    privatekey_path: "{{ private_key }}"
+  delegate_to: localhost
+
+# - name: Add the Certbot (let's encrypt ACME client) PPA
+#   apt_repository:
+#     repo: 'ppa:certbot/certbot'
+#     state: present
+#   become: True
 #   delegate_to: localhost
 
-- name: Add the Certbot (let's encrypt ACME client) PPA
-  apt_repository:
-    repo: 'ppa:certbot/certbot'
-    state: present
-  become: True
-  delegate_to: localhost
+# - name: Install Certbot
+#   apt:
+#     name: certbot
+#     state: latest
+#     update_cache: yes
+#   become: True
+#   delegate_to: localhost
 
-- name: Install Certbot
-  apt:
-    name: certbot
-    state: latest
-    update_cache: yes
-  become: True
-  delegate_to: localhost
-
-- name: "Ensure that the well-known directory is present on the server"
+- name: "Ensure that the well-known {{ well_known_path }} directory is present on the server"
   file:
     state: directory
     path: "{{ well_known_path }}/.well-known/acme-challenge"
     mode: 0755
+    recurse: yes
   tags:
     - generate_cert
 
@@ -91,18 +92,21 @@
     locality_name: "{{ crt_locality_name }}"
     organization_name: "{{ crt_organization_name }}"
     subject_alt_name:  "{{ item['additional_domains'] }}"
-  delegate_to: localhost
+    mode: 0600  
+  delegate_to: localhost  
   tags:
     - generate_cert
+    - csr
 
-- name: "Readback the CSR"
+
+- name: "Readback the CSR "
   raw: "openssl req -in {{ csr_path }} -noout -text"
   register: csr
   delegate_to: localhost
   tags:
     - generate_cert
 
-- name: Display CSR
+- name: "Display CSR {{ csr_path }}"
   debug:
     var: csr.stdout_lines
   delegate_to: localhost
@@ -125,10 +129,15 @@
 
 - name: "Add challenge/response files to the server. Assumes webserver config is setup for the ACME protocol"
   copy:
-     dest: "{{ well_known_path }}/{{item.value['http-01']['resource'] }}"
-     content: "{{ item.value['http-01']['resource_value'] }}"
+     dest: "{{ well_known_path }}/{{j.value['http-01']['resource'] }}"
+     content: "{{ j.value['http-01']['resource_value'] }}"
+     owner: www-data
+     mode: 0755
   when: le_challenge is changed
   with_dict: "{{ le_challenge['challenge_data'] }}"
+  loop_control:
+    loop_var: j
+  become: True
   tags:
     - generate_cert
 
@@ -141,10 +150,14 @@
     acme_directory: "https://acme-v02.api.letsencrypt.org/directory"
     acme_version: 2
     terms_agreed: yes
-    
   delegate_to: localhost  
+  register: list_of_files
   tags:
     - generate_cert
+
+- name: show response from le
+  debug:
+    var: list_of_files
 
 - name: "Copy Certificate Private Key to the server"
   copy:
@@ -158,7 +171,7 @@
   tags:
     - copy_cert
 
-- name: "Copy Certificate to the server"
+- name: "Copy Certificate to the server {{ server_crt_path }}"
   copy:
     src: "{{ certs_dir }}/{{ item['primary_domain'] }}.crt"
     dest: "{{ server_crt_path }}"
@@ -170,7 +183,8 @@
   tags:
     - copy_cert
 
-# - name: "Reload the webserver"
+# - name: restart nginx
+#   service: name=nginx state=restarted enabled=yes
 
 
 
